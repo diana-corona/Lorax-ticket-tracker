@@ -1,0 +1,32 @@
+{
+  "name": "ticket-gastos",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "prepare:ocr": "node scripts/prepare-ocr.mjs",
+    "predev": "npm run prepare:ocr",
+    "prebuild": "npm run prepare:ocr",
+    "build": "tsc --noEmit && vite build && node scripts/build-sw.mjs",
+    "prebuild:portable": "npm run prepare:ocr",
+    "build:portable": "tsc --noEmit && node scripts/build-portable.mjs",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test",
+    "test:portable": "playwright test --config playwright.portable.config.ts"
+  },
+  "dependencies": {
+    "@tesseract.js-data/spa": "^1.0.0",
+    "tesseract.js": "^6.0.1"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.51.0",
+    "@types/node": "^22.13.0",
+    "fake-indexeddb": "^6.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^8.0.0",
+    "vitest": "^5.1.0"
+  }
+}
