@@ -81,9 +81,11 @@ Unit tests cover date ranges, money, filters, receipt parsing, CSV,
 backup/restore, and storage transactions. Browser tests exercise the standalone
 file without a server or internet, including actual OCR.
 
-Personal receipt photos in `tickets-test/` are excluded from Git. Additional
-photo tests run when the known local samples are present; otherwise the photo
-suite is skipped. Synthetic OCR tests still run without those photos. Never
+Personal receipt photos and their expectations in `tickets-test/` are excluded
+from Git. Additional photo tests read `tickets-test/expected.json`, a local
+mapping of photo filenames to expected `amount` and `date` strings. They run
+only when both photos and expectations are present; otherwise the photo suite
+is skipped. Synthetic OCR tests still run without those photos. Never
 commit receipt photos, expense exports, backups, or test reports containing them.
 
 ## Rights
