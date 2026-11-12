@@ -1,5 +1,5 @@
-import type { Expense } from './domain';
-import { categories, labels, normalize, parseAmount, validateExpense } from './domain';
+import type { Category, Expense } from './domain';
+import { categories, categoryLabel, createCustomCategory, normalize, parseAmount, validateExpense } from './domain';
 
 export const MAX_CSV_BYTES = 5 * 1024 * 1024;
 const header = ['fecha', 'comercio', 'categoria', 'importe', 'moneda', 'notas'];
@@ -13,7 +13,7 @@ export function exportCsv(expenses: Expense[]): string {
   return '\uFEFF' + [
     header.map(cell).join(','),
     ...expenses.map(expense => [
-      expense.date, expense.merchant, labels[expense.category],
+      expense.date, expense.merchant, categoryLabel(expense.category),
       (expense.amount / 100).toFixed(2), expense.currency, expense.notes,
     ].map(cell).join(',')),
   ].join('\r\n') + '\r\n';
@@ -53,7 +53,7 @@ function restoreText(value: string): string {
   return value.startsWith("'") && (/^[\s\u0000-\u001f]*[=+\-@]/.test(value.slice(1)) || /^[\t\r\n]/.test(value.slice(1)))
     ? value.slice(1) : value;
 }
-export function importCsv(text: string): Expense[] {
+export function importCsv(text: string, knownCategories: readonly Category[] = categories): Expense[] {
   if (new Blob([text]).size > MAX_CSV_BYTES) throw new Error('El CSV supera el límite de 5 MB.');
   const [columns, ...rows] = parseRows(text.replace(/^\uFEFF/, ''));
   if (!columns || columns.length !== header.length || new Set(columns.map(value => normalize(value.trim()))).size !== header.length ||
@@ -62,11 +62,14 @@ export function importCsv(text: string): Expense[] {
   }
   const indexes = header.map(name => columns.findIndex(value => normalize(value.trim()) === name));
   const createdAt = new Date().toISOString();
+  const available = [...knownCategories];
   return rows.map((row, index) => {
     try {
       if (row.length !== columns.length) throw new Error('El número de columnas no coincide.');
       const [date, merchant, categoryText, amountText, currency, notes] = indexes.map(i => restoreText(row[i]));
-      const category = categories.find(value => normalize(labels[value]) === normalize(categoryText.trim()));
+      const category = available.find(value => normalize(categoryLabel(value)) === normalize(categoryText.trim()))
+        ?? createCustomCategory(categoryText);
+      if (!available.includes(category)) available.push(category);
       const amount = parseAmount(amountText);
       if (!category || amount === null || currency.trim() !== 'MXN') throw new Error('Revisa categoría, importe y moneda (MXN).');
       if (merchant.length > 160 || notes.length > 2000) throw new Error('El comercio o las notas superan la longitud permitida.');

@@ -1,4 +1,4 @@
-import { validateExpense, type Expense } from './domain';
+import { validateCustomCategories, validateExpense, type CustomCategory, type Expense } from './domain';
 
 export const MAX_BACKUP_BYTES = 100 * 1024 * 1024;
 interface BackupExpense extends Omit<Expense, 'photo'> {
@@ -11,7 +11,10 @@ function base64(bytes: Uint8Array): string {
   }
   return btoa(chunks.join(''));
 }
-export async function exportBackup(expenses: Expense[]): Promise<string> {
+export async function exportBackup(expenses: Expense[], customCategories: CustomCategory[] = []): Promise<string> {
+  customCategories = [...new Set([...customCategories, ...expenses.map(expense => expense.category)
+    .filter((category): category is CustomCategory => category.startsWith('custom:'))])];
+  validateCustomCategories(customCategories);
   const records: BackupExpense[] = [];
   for (const { photo, ...expense } of expenses) {
     records.push({
@@ -19,7 +22,7 @@ export async function exportBackup(expenses: Expense[]): Promise<string> {
       ...(photo ? { photo: { type: photo.type, data: base64(new Uint8Array(await photo.arrayBuffer())) } } : {}),
     });
   }
-  const result = JSON.stringify({ format: 'mis-tickets', version: 1, createdAt: new Date().toISOString(), expenses: records });
+  const result = JSON.stringify({ format: 'mis-tickets', version: 1, createdAt: new Date().toISOString(), customCategories, expenses: records });
   if (new Blob([result]).size > MAX_BACKUP_BYTES) throw new Error('El respaldo supera 100 MB. Exporta también tus registros a CSV.');
   return result;
 }
@@ -27,13 +30,18 @@ function object(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 export function importBackup(text: string): Expense[] {
+  return importBackupData(text).expenses;
+}
+export function importBackupData(text: string): { expenses: Expense[]; customCategories: CustomCategory[] } {
   try {
     if (new Blob([text]).size > MAX_BACKUP_BYTES) throw new Error();
     const backup: unknown = JSON.parse(text);
     if (!object(backup) || backup.format !== 'mis-tickets' || backup.version !== 1 ||
       !Array.isArray(backup.expenses) || backup.expenses.length > 10_000) throw new Error();
+    const customCategories = backup.customCategories === undefined ? [] : backup.customCategories;
+    validateCustomCategories(customCategories);
     const ids = new Set<string>();
-    return backup.expenses.map((record: unknown): Expense => {
+    const expenses = backup.expenses.map((record: unknown): Expense => {
       if (!object(record) ||
         typeof record.id !== 'string' || !/^[a-zA-Z0-9_-]{1,100}$/.test(record.id) || ids.has(record.id) ||
         typeof record.merchant !== 'string' || record.merchant.length > 160 ||
@@ -60,6 +68,10 @@ export function importBackup(text: string): Expense[] {
       }
       return expense;
     });
+    const restoredCategories = [...new Set([...customCategories, ...expenses.map(expense => expense.category)
+      .filter((category): category is CustomCategory => category.startsWith('custom:'))])];
+    validateCustomCategories(restoredCategories);
+    return { expenses, customCategories: restoredCategories };
   } catch {
     throw new Error('Respaldo inválido o incompatible. Selecciona un respaldo de Lorax ticket tracker (versión 1, máximo 100 MB). No se cambió ningún gasto.');
   }

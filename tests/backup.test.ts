@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { exportBackup, importBackup } from '../src/backup';
+import { exportBackup, importBackup, importBackupData } from '../src/backup';
 import type { Expense } from '../src/domain';
 
 const expense: Expense = {
@@ -22,6 +22,24 @@ describe('respaldo completo', () => {
     expect(importBackup(await exportBackup([expense]))).toEqual([expense]);
     expect(importBackup(await exportBackup([]))).toEqual([]);
   });
+  it('conserva categorías personales usadas y sin gastos y admite respaldos antiguos', async () => {
+    const customExpense: Expense = { ...expense, category: 'custom:Mascotas <&">' };
+    const encoded = await exportBackup([customExpense], ['custom:Educación']);
+    expect(importBackupData(encoded)).toEqual({
+      expenses: [customExpense], customCategories: ['custom:Educación', 'custom:Mascotas <&">'],
+    });
+    expect(importBackupData(document([expense]))).toEqual({ expenses: [expense], customCategories: [] });
+    expect(importBackupData(await exportBackup([], ['custom:Educación']))).toEqual({
+      expenses: [], customCategories: ['custom:Educación'],
+    });
+  });
+  it.each([null, 'Mascotas', ['invalid'], ['custom:'], ['custom:super'], ['custom:Educación', 'custom:educacion']])(
+    'rechaza metadatos de categorías inválidos: %j', customCategories => {
+      expect(() => importBackupData(JSON.stringify({
+        format: 'mis-tickets', version: 1, expenses: [expense], customCategories,
+      }))).toThrow('No se cambió ningún gasto');
+    },
+  );
   it.each([
     'not json', '{}', '{"format":"otra","version":1,"expenses":[]}',
     '{"format":"mis-tickets","version":2,"expenses":[]}',

@@ -1,12 +1,12 @@
 import './style.css';
 import {
-  categories, labels, colors, localDate, money, parseAmount, filterExpenses,
+  categories, categoryLabel, categoryColor, createCustomCategory, normalize, localDate, money, parseAmount, filterExpenses,
   periodBounds, dailyTotals, categoryTotals,
-  type Expense, type Filters, type Category, type Period,
+  type Expense, type Filters, type Category, type CustomCategory, type Period,
 } from './domain';
-import { getExpenses, saveExpense, deleteExpense, replaceExpenses, sessionOnly, enableSessionStorage } from './db';
+import { getExpenses, saveExpense, deleteExpense, replaceExpenses, getCustomCategories, saveCustomCategories, sessionOnly, enableSessionStorage } from './db';
 import { exportCsv, importCsv, MAX_CSV_BYTES } from './csv';
-import { exportBackup, importBackup, MAX_BACKUP_BYTES } from './backup';
+import { exportBackup, importBackupData, MAX_BACKUP_BYTES } from './backup';
 import { parseReceipt } from './receipt';
 import { registerOffline } from './offline';
 import { readReceipt } from './ocr';
@@ -15,6 +15,7 @@ type View = 'home' | 'history' | 'form' | 'data';
 type Draft = { id?: string; date: string; merchant: string; amount: string; category: Category; notes: string; photo?: Blob };
 const root = document.querySelector<HTMLDivElement>('#app')!;
 let expenses: Expense[] = [];
+let customCategories: CustomCategory[] = [];
 let view: View = 'home';
 let filters: Filters = { period: 'month', month: localDate().slice(0, 7), category: '', search: '' };
 let draft: Draft = emptyDraft();
@@ -33,8 +34,11 @@ function escape(value: string): string {
   return value.replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[char]!);
 }
 function categoryOptions(selected: string, all = false): string {
-  return `${all ? '<option value="">Todas las categorías</option>' : ''}${categories.map(category =>
-    `<option value="${category}" ${selected === category ? 'selected' : ''}>${labels[category]}</option>`).join('')}`;
+  return `${all ? '<option value="">Todas las categorías</option>' : ''}${availableCategories().map(category =>
+    `<option value="${escape(category)}" ${selected === category ? 'selected' : ''}>${escape(categoryLabel(category))}</option>`).join('')}`;
+}
+function availableCategories(): Category[] {
+  return [...new Set<Category>([...categories, ...customCategories, ...expenses.map(expense => expense.category)])];
 }
 function selectedExpenses() { return filterExpenses(expenses, filters); }
 function notify(message: string, error = false) {
@@ -80,6 +84,7 @@ function bindNavigation() {
     dirty = false;
     view = next;
     render();
+    if (next === 'form') document.querySelector<HTMLElement>('main h1')?.focus();
   };
   document.querySelectorAll<HTMLButtonElement>('[data-view]').forEach(button => {
     button.addEventListener('click', () => navigate(button.dataset.view as View));
@@ -121,10 +126,12 @@ function renderOverview() {
     </section>
     <section class="charts"><article class="panel"><div class="section-title"><h2>¿En qué se fue?</h2><span>Por categoría</span></div>${renderCategories(list)}</article>
     <article class="panel"><div class="section-title"><h2>Día a día</h2><span>${dailyTotals([], start, end).length} días</span></div>${renderDaily(list, start, end)}</article></section>` : ''}
-    <section class="panel history-panel"><div class="section-title"><h2>${view === 'home' ? 'Últimos movimientos' : 'Historial de gastos'}</h2><span>${list.length} gastos</span></div>
+    <section class="panel history-panel"><div class="section-title"><h2>${list.length ? (view === 'home' ? 'Últimos movimientos' : 'Historial de gastos') :
+      `<button type="button" class="text-button empty-heading" data-view="form">${view === 'home' ? 'Últimos movimientos' : 'Historial de gastos'}</button>`}</h2>
+      ${list.length ? `<span>${list.length} gastos</span>` : '<button type="button" class="text-button" data-view="form" aria-label="0 gastos: agrega un gasto">0 gastos</button>'}</div>
     ${list.length ? `<ul class="expense-list">${(view === 'home' ? list.slice(0, 5) : list).map(expense => `
-      <li><span class="category-mark" style="--category-color:${colors[expense.category]}" aria-hidden="true">${labels[expense.category].slice(0, 1)}</span><div class="expense-info"><strong>${escape(expense.merchant)}</strong><span>${labels[expense.category]} · ${formatDate(expense.date)}${expense.photo ? ' · Ticket adjunto' : ''}</span></div><div class="expense-right"><strong>${money(expense.amount)}</strong><button class="text-button edit-expense" data-id="${expense.id}" aria-label="Editar gasto de ${escape(expense.merchant)}">Ver / editar</button></div></li>`).join('')}</ul>` :
-      '<div class="empty"><span class="empty-icon" aria-hidden="true">+</span><h3>No hay gastos en esta selección</h3><p>Agrega tu primer ticket o cambia los filtros.</p></div>'}
+      <li><span class="category-mark" style="--category-color:${categoryColor(expense.category)}" aria-hidden="true">${escape(categoryLabel(expense.category).slice(0, 1))}</span><div class="expense-info"><strong>${escape(expense.merchant)}</strong><span>${escape(categoryLabel(expense.category))} · ${formatDate(expense.date)}${expense.photo ? ' · Ticket adjunto' : ''}</span></div><div class="expense-right"><strong>${money(expense.amount)}</strong><button class="text-button edit-expense" data-id="${expense.id}" aria-label="Editar gasto de ${escape(expense.merchant)}">Ver / editar</button></div></li>`).join('')}</ul>` :
+      '<button type="button" class="empty empty-action" data-view="form"><span class="empty-icon" aria-hidden="true">+</span><span class="empty-title">No hay gastos en esta selección</span><span class="empty-description">Agrega tu primer ticket o cambia los filtros.</span><span class="text-button">Agrega un gasto</span></button>'}
     </section>`;
 }
 function renderCategories(list: Expense[]): string {
@@ -135,10 +142,10 @@ function renderCategories(list: Expense[]): string {
   const segments = totals.map(item => {
     const start = position;
     position += item.amount / total * 100;
-    return `${colors[item.category]} ${start}% ${position}%`;
+    return `${categoryColor(item.category)} ${start}% ${position}%`;
   });
   return `<div class="category-chart"><div class="donut" style="background:conic-gradient(${segments.join(',')})" role="img" aria-label="Distribución por categoría; importes en la lista adjunta"><div><span>${totals.length}</span><small>categorías</small></div></div><ul class="legend">${totals.map(item =>
-    `<li><span class="dot" style="background:${colors[item.category]}"></span><span>${labels[item.category]}</span><strong>${money(item.amount)}</strong><small>${Math.round(item.amount / total * 100)} %</small></li>`).join('')}</ul></div>`;
+    `<li><span class="dot" style="background:${categoryColor(item.category)}"></span><span>${escape(categoryLabel(item.category))}</span><strong>${money(item.amount)}</strong><small>${Math.round(item.amount / total * 100)} %</small></li>`).join('')}</ul></div>`;
 }
 function renderDaily(list: Expense[], start: string, end: string): string {
   if (!list.length) return '<div class="empty small"><p>Tu evolución diaria aparecerá aquí.</p></div>';
@@ -193,7 +200,7 @@ function bindOverview() {
 }
 function renderForm(): string {
   if (draft.photo) photoUrl = URL.createObjectURL(draft.photo);
-  return `<section class="page-heading"><div><p class="eyebrow">UN TICKET, UN GASTO</p><h1>${draft.id ? 'Revisa tu gasto' : 'Agrega un gasto'}</h1><p>Agrega tu ticket y revisa los datos antes de guardar.</p></div></section>
+  return `<section class="page-heading"><div><p class="eyebrow">UN TICKET, UN GASTO</p><h1 tabindex="-1">${draft.id ? 'Revisa tu gasto' : 'Agrega un gasto'}</h1><p>Agrega tu ticket y revisa los datos antes de guardar.</p></div></section>
     <form id="expense-form" class="form-layout">
       <section class="panel receipt-panel"><h2>Tu ticket</h2><p class="muted">Toma la foto de frente, con buena luz y el total visible.</p>
         ${photoUrl ? `<img class="receipt-preview" src="${photoUrl}" alt="Foto del ticket de este gasto" />` : '<div class="photo-placeholder" aria-hidden="true"><span>▤</span><p>Una foto y listo.<br />También puedes capturarlo a mano.</p></div>'}
@@ -208,6 +215,11 @@ function renderForm(): string {
         <label>Importe (MXN)<input name="amount" type="text" inputmode="decimal" value="${escape(draft.amount)}" placeholder="0.00" maxlength="16" required aria-describedby="amount-help" /></label></div>
         <small id="amount-help" class="muted">Usa punto para los centavos: 1234.50.</small>
         <label>Categoría<select name="category">${categoryOptions(draft.category)}</select></label>
+        <details class="custom-category"><summary>Agregar categoría</summary>
+          <label>Nombre de la categoría<input id="new-category" type="text" maxlength="40" placeholder="Ej. Mascotas" /></label>
+          <button type="button" id="add-category" class="secondary" ${storageError ? 'disabled' : ''}>Guardar categoría</button>
+          <p class="muted">Se guarda solo en este navegador. El respaldo completo incluye tus categorías.</p>
+        </details>
         <label>Notas <span class="optional">(opcional)</span><textarea name="notes" rows="3" maxlength="2000" placeholder="Algo que quieras recordar…">${escape(draft.notes)}</textarea></label>
         <div class="form-buttons"><button id="save-expense" type="submit" class="primary" ${storageError ? 'disabled' : ''}>Guardar gasto</button><button type="button" id="cancel" class="secondary">Cancelar</button></div>
         ${draft.id ? '<button id="delete-expense" type="button" class="danger text-button">Eliminar este gasto</button>' : ''}
@@ -222,7 +234,7 @@ function readDraft() {
 function setBusy(value: boolean) {
   busy = value;
   document.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement | HTMLTextAreaElement>('button, input, select, textarea')
-    .forEach(element => { element.disabled = value || (Boolean(storageError) && element.id === 'save-expense'); });
+    .forEach(element => { element.disabled = value || (Boolean(storageError) && ['save-expense', 'add-category'].includes(element.id)); });
   document.querySelector('form')?.setAttribute('aria-busy', String(value));
 }
 async function preparePhoto(file: File): Promise<Blob> {
@@ -251,6 +263,28 @@ async function preparePhoto(file: File): Promise<Blob> {
 function bindForm() {
   const form = document.querySelector<HTMLFormElement>('#expense-form')!;
   form.addEventListener('input', () => { dirty = true; });
+  document.querySelector('#add-category')?.addEventListener('click', async () => {
+    if (busy || storageError) return;
+    readDraft();
+    try {
+      const category = createCustomCategory(document.querySelector<HTMLInputElement>('#new-category')!.value);
+      if (availableCategories().some(value => normalize(categoryLabel(value)) === normalize(categoryLabel(category)))) {
+        throw new Error('Ya existe una categoría con ese nombre.');
+      }
+      setBusy(true);
+      const updated = [...customCategories, category];
+      await saveCustomCategories(updated);
+      customCategories = updated;
+      draft.category = category;
+      backupNeeded = true;
+      dirty = true;
+      busy = false;
+      render();
+      document.querySelector<HTMLSelectElement>('select[name="category"]')?.focus();
+      notify(sessionOnly ? 'Categoría conservada solo en esta sesión. Descarga un respaldo antes de cerrar.' : 'Categoría guardada.');
+    } catch (error) { notify(readableError(error), true); }
+    finally { setBusy(false); }
+  });
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (busy || storageError) return;
@@ -341,11 +375,11 @@ function renderData(): string {
     <section class="panel"><h2>Llévate tus registros</h2><p>Exporta un CSV compatible con hojas de cálculo. Incluye fecha, comercio, categoría, importe, moneda y notas.</p>
     <p><strong>${expenses.length} gastos guardados</strong> · ${selectedExpenses().length} en la selección actual.</p>
     <div class="data-actions"><button id="export-all" class="primary">Exportar todos a CSV</button><button id="export-selection" class="secondary">Exportar selección actual</button><label class="file-button secondary">Importar CSV<input id="import-csv" type="file" accept=".csv,text/csv" ${storageError ? 'disabled' : ''} /></label></div>
-    <p class="muted">Importa un CSV exportado por Lorax ticket tracker para agregar gastos sin borrar los actuales. Importar el mismo archivo otra vez duplicará sus registros. Máximo 5 MB y 10,000 gastos.</p>
+    <p class="muted">Importa un CSV exportado por Lorax ticket tracker para agregar gastos y sus categorías sin borrar los actuales. Importar el mismo archivo otra vez duplicará sus registros. Máximo 5 MB y 10,000 gastos.</p>
     <p class="muted">El CSV no contiene fotos y no sirve para restaurar la app. Usa el respaldo completo para conservarlo todo.</p></section>
-    <section class="panel backup-panel"><h2>Respaldo completo con fotos</h2><p>Descarga una copia para recuperar tus gastos y fotos cuando los necesites. Guárdala en un lugar seguro: cualquiera con acceso al respaldo podrá ver su contenido.</p>
+    <section class="panel backup-panel"><h2>Respaldo completo con fotos</h2><p>Descarga una copia para recuperar tus gastos, fotos y categorías cuando los necesites. Guárdala en un lugar seguro: cualquiera con acceso al respaldo podrá ver su contenido.</p>
     <div class="data-actions"><button id="export-backup" class="primary">Descargar respaldo completo</button><label class="file-button secondary">Restaurar respaldo<input id="import-backup" type="file" accept=".json,application/json" ${storageError ? 'disabled' : ''} /></label></div>
-    <p class="muted">Restaurar reemplaza todos los gastos actuales después de confirmar. Máximo 100 MB. Verifica que el respaldo se haya descargado antes de cerrar.</p></section>
+    <p class="muted">Restaurar reemplaza todos los gastos y categorías actuales después de confirmar. Máximo 100 MB. Verifica que el respaldo se haya descargado antes de cerrar.</p></section>
     <section class="privacy-note"><h2>No pierdas tus tickets</h2><p>Descarga un respaldo antes de cerrar Lorax ticket tracker, borrar datos o cambiar de teléfono. Si tus gastos no aparecen al volver, usa “Restaurar respaldo”.</p>
     <p>Antes de cambiar de nombre o mover Lorax ticket tracker, guarda también un respaldo para recuperar tus registros.</p></section>`;
 }
@@ -372,12 +406,15 @@ function bindData() {
     setBusy(true);
     try {
       if (file.size > MAX_CSV_BYTES) throw new Error('El CSV supera el límite de 5 MB.');
-      const imported = importCsv(await file.text());
+      const imported = importCsv(await file.text(), availableCategories());
       if (!imported.length) { notify('El CSV no contiene gastos para importar.'); return; }
       if (!confirm(`¿Agregar ${imported.length} gastos? Se conservarán los actuales. Si ya importaste este archivo, sus gastos se duplicarán. El CSV no incluye fotos.`)) return;
       const combined = [...expenses, ...imported];
-      await replaceExpenses(combined);
+      const updatedCategories = [...new Set([...customCategories, ...imported.map(expense => expense.category)
+        .filter((category): category is CustomCategory => category.startsWith('custom:'))])];
+      await replaceExpenses(combined, updatedCategories);
       expenses = combined;
+      customCategories = updatedCategories;
       backupNeeded = true;
       busy = false;
       render();
@@ -394,7 +431,7 @@ function bindData() {
     if (busy) return;
     setBusy(true);
     try {
-      const json = await exportBackup(expenses);
+      const json = await exportBackup(expenses, customCategories);
       downloadFile(new Blob([json], { type: 'application/json' }), `lorax-respaldo-${localDate()}.json`);
       backupNeeded = false;
       notify('Respaldo generado con gastos y fotos. Verifica que se haya descargado antes de cerrar.');
@@ -408,10 +445,12 @@ function bindData() {
     setBusy(true);
     try {
       if (file.size > MAX_BACKUP_BYTES) throw new Error('El respaldo supera el límite de 100 MB.');
-      const restored = importBackup(await file.text());
-      if (!confirm(`¿Restaurar ${restored.length} gastos y sus fotos? Se reemplazarán los ${expenses.length} gastos actuales. No se puede deshacer.`)) return;
-      await replaceExpenses(restored);
-      expenses = restored;
+      const restored = importBackupData(await file.text());
+      if (!confirm(`¿Restaurar ${restored.expenses.length} gastos, sus fotos y categorías? Se reemplazarán los ${expenses.length} gastos y las categorías actuales. No se puede deshacer.`)) return;
+      await replaceExpenses(restored.expenses, restored.customCategories);
+      expenses = restored.expenses;
+      customCategories = restored.customCategories;
+      filters.category = '';
       backupNeeded = true;
       busy = false;
       render();
@@ -426,7 +465,10 @@ window.addEventListener('beforeunload', event => {
 });
 async function start() {
   root.innerHTML = '<main class="loading" role="status">Abriendo Lorax ticket tracker…</main>';
-  try { expenses = await getExpenses(); }
+  try {
+    expenses = await getExpenses();
+    customCategories = await getCustomCategories();
+  }
   catch {
     if (__PORTABLE__) enableSessionStorage();
     else storageError = 'No se pudieron abrir tus gastos. Revisa los permisos del navegador y vuelve a abrir Lorax ticket tracker.';

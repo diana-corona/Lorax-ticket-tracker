@@ -1,6 +1,6 @@
 import 'fake-indexeddb/auto';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { deleteExpense, getExpenses, saveExpense, replaceExpenses } from '../src/db';
+import { deleteExpense, getExpenses, saveExpense, replaceExpenses, getCustomCategories, saveCustomCategories } from '../src/db';
 import type { Expense } from '../src/domain';
 
 function expense(): Expense {
@@ -13,6 +13,7 @@ function expense(): Expense {
 beforeEach(async () => {
   vi.restoreAllMocks();
   for (const item of await getExpenses()) await deleteExpense(item.id);
+  await saveCustomCategories([]);
 });
 describe('persistencia local en IndexedDB', () => {
   it('guarda y recupera datos y foto después de finalizar la transacción', async () => {
@@ -78,5 +79,26 @@ describe('persistencia local en IndexedDB', () => {
     await expect(replaceExpenses([{ ...expense(), amount: -1 }])).rejects.toThrow();
     await expect(replaceExpenses([expense(), expense()])).rejects.toThrow('duplicados');
     expect(await getExpenses()).toHaveLength(1);
+  });
+  it('guarda categorías sin gastos y las reemplaza junto con el respaldo', async () => {
+    await saveCustomCategories(['custom:Mascotas']);
+    expect(await getCustomCategories()).toEqual(['custom:Mascotas']);
+    await replaceExpenses([{ ...expense(), category: 'custom:Educación' }], ['custom:Educación']);
+    expect(await getCustomCategories()).toEqual(['custom:Educación']);
+    expect((await getExpenses())[0].category).toBe('custom:Educación');
+    await replaceExpenses([], []);
+    expect(await getCustomCategories()).toEqual([]);
+  });
+  it('revierte gastos y categorías juntos si falla el guardado de categorías', async () => {
+    await saveExpense(expense());
+    await saveCustomCategories(['custom:Mascotas']);
+    const put = IDBObjectStore.prototype.put;
+    vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (this: IDBObjectStore, ...args) {
+      if (this.name === 'settings') throw new DOMException('Storage full', 'QuotaExceededError');
+      return put.apply(this, args);
+    });
+    await expect(replaceExpenses([{ ...expense(), id: 'new' }], ['custom:Educación'])).rejects.toThrow();
+    expect((await getExpenses()).map(item => item.id)).toEqual(['stored']);
+    expect(await getCustomCategories()).toEqual(['custom:Mascotas']);
   });
 });

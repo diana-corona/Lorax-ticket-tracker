@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  categoryTotals, dailyTotals, filterExpenses, localDate, parseAmount,
+  categoryTotals, categoryLabel, createCustomCategory, validateCustomCategories, dailyTotals, filterExpenses, localDate, parseAmount,
   periodBounds, validDate, validateExpense, type Expense, type Filters,
 } from '../src/domain';
 
@@ -69,6 +69,16 @@ describe('selección compartida y gráficas', () => {
     const newer = expense({ id: 'two', createdAt: '2026-11-10T13:00:00Z' });
     expect(filterExpenses([older, newer], filters, today)).toEqual([newer, older]);
   });
+  it('incluye categorías personales en filtros y totales', () => {
+    const category = createCustomCategory(' Mascotas ');
+    const list = [expense(), expense({ id: 'pet', category, amount: 500 })];
+    expect(categoryLabel(category)).toBe('Mascotas');
+    expect(filterExpenses(list, { ...filters, category }, today)).toEqual([list[1]]);
+    expect(categoryTotals(list)).toEqual([
+      { category: 'super', amount: 12345 }, { category, amount: 500 },
+    ]);
+    expect(() => validateExpense(list[1])).not.toThrow();
+  });
 });
 describe('importes y validación', () => {
   it.each([
@@ -84,5 +94,13 @@ describe('importes y validación', () => {
     expect(() => validateExpense(expense({ merchant: '  ' }))).toThrow('comercio');
     expect(() => validateExpense(expense({ amount: 1.5 }))).toThrow('importe');
     expect(() => validateExpense(expense({ category: 'invalid' as Expense['category'] }))).toThrow('categoría');
+  });
+  it.each(['', '   ', 'x'.repeat(41), 'Una\ncategoría', 'SUPER'])('rechaza nombres de categoría inválidos: %s', name => {
+    expect(() => createCustomCategory(name)).toThrow('categoría');
+  });
+  it('rechaza categorías personales mal formadas o duplicadas sin distinguir acentos', () => {
+    expect(() => validateCustomCategories(['custom: Mascotas'])).toThrow();
+    expect(() => validateCustomCategories(['custom:Educación', 'custom:educacion'])).toThrow('Ya existe');
+    expect(() => validateCustomCategories(['custom:super'])).toThrow();
   });
 });

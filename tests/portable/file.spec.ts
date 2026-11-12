@@ -30,7 +30,7 @@ test('archivo local sin servidor ni red: OCR real, respaldo con foto y reapertur
   await expect(page.locator('body')).not.toContainText('Tu dinero, más claro');
   await expect(page.locator('body')).not.toContainText('UN POCO DE ORDEN, MUCHA TRANQUILIDAD');
   await expect(page.locator('body')).not.toContainText('Una visión clara de tu dinero.');
-  await page.getByRole('button', { name: '+ Nuevo gasto', exact: true }).first().click();
+  await page.getByRole('button', { name: 'No hay gastos en esta selección' }).click();
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="700">
     <rect width="1000" height="700" fill="white"/>
     <g font-family="Arial, sans-serif" font-size="65" fill="black">
@@ -43,6 +43,9 @@ test('archivo local sin servidor ni red: OCR real, respaldo con foto y reapertur
   await page.getByRole('button', { name: 'Leer ticket', exact: true }).click();
   await expect(page.getByLabel('Importe (MXN)')).toHaveValue('116.00', { timeout: 60_000 });
   await expect(page.getByLabel('Comercio', { exact: true })).toHaveValue('WALMART');
+  await page.getByText('Agregar categoría', { exact: true }).click();
+  await page.getByLabel('Nombre de la categoría').fill('Papelería');
+  await page.getByRole('button', { name: 'Guardar categoría', exact: true }).click();
   await page.getByLabel('Fecha del gasto').fill(await page.evaluate(() => {
     const date = new Date();
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
@@ -51,12 +54,15 @@ test('archivo local sin servidor ni red: OCR real, respaldo con foto y reapertur
   await expect(page.getByText('Gasto guardado.', { exact: true })).toBeVisible();
   const json = JSON.parse(await backup(page));
   expect(json.expenses).toHaveLength(1);
+  expect(json.customCategories).toEqual(['custom:Papelería']);
+  expect(json.expenses[0].category).toBe('custom:Papelería');
   expect(json.expenses[0].photo.type).toBe('image/jpeg');
   expect(json.expenses[0].photo.data.length).toBeGreaterThan(100);
   const reopened = await context.newPage();
   await reopened.goto(appUrl);
   await expect(reopened.getByTestId('total')).toHaveText('$116.00');
   await reopened.getByRole('button', { name: 'Editar gasto de WALMART' }).click();
+  await expect(reopened.getByRole('combobox', { name: 'Categoría', exact: true })).toHaveValue('custom:Papelería');
   await expect(reopened.getByAltText('Foto del ticket de este gasto')).toBeVisible();
   await reopened.getByRole('button', { name: 'Quitar foto', exact: true }).click();
   await reopened.getByRole('button', { name: 'Guardar gasto', exact: true }).click();
@@ -87,6 +93,10 @@ test('si Chrome deniega almacenamiento, advierte y permite recuperar respaldo en
   await page.getByRole('button', { name: '+ Nuevo gasto', exact: true }).first().click();
   await page.getByLabel('Comercio', { exact: true }).fill('Temporal');
   await page.getByLabel('Importe (MXN)').fill('20');
+  await page.getByText('Agregar categoría', { exact: true }).click();
+  await page.getByLabel('Nombre de la categoría').fill('Mascotas');
+  await page.getByRole('button', { name: 'Guardar categoría', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Categoría conservada solo en esta sesión.');
   await page.getByRole('button', { name: 'Guardar gasto', exact: true }).click();
   await expect(page.getByText('Gasto conservado solo en esta sesión.', { exact: false })).toBeVisible();
   const json = await backup(page);
@@ -103,6 +113,7 @@ test('si Chrome deniega almacenamiento, advierte y permite recuperar respaldo en
   });
   await expect(page.getByText('Respaldo inválido o incompatible.', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: 'Resumen', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Categoría', exact: true }).selectOption('custom:Mascotas');
   await expect(page.getByTestId('total')).toHaveText('$20.00');
 });
 

@@ -7,6 +7,10 @@ review spending in Mexican pesos (MXN).
 - Monthly, last 7, 28, and 90 days views with charts and filters.
 - CSV import/export and full backup/restore, including receipt photos.
 - Expense editing and deletion.
+- Personal categories: under the expense category selector, choose **Agregar
+  categoría**. Categories stay in this browser/device and appear in filters and
+  charts. Full backups include unused categories too; CSV carries the categories
+  used by exported expenses. Built-in receipt suggestions remain unchanged.
 
 ## Build the Android file
 
@@ -36,7 +40,8 @@ warning and keeps expenses only until the tab is closed or refreshed.
 
 CSV import adds expenses without deleting existing ones; importing the same
 file twice duplicates its records. CSV does not include photos. Full backup
-restore replaces current expenses after confirmation and includes photos.
+restore replaces current expenses and personal categories after confirmation
+and includes photos. Backups from before personal categories are still supported.
 Backups are not encrypted; keep them somewhere safe.
 
 ## Development

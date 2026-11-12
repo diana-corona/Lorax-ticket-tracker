@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { enableSessionStorage, saveExpense, getExpenses, deleteExpense, replaceExpenses, sessionOnly } from '../src/db';
+import { enableSessionStorage, saveExpense, getExpenses, deleteExpense, replaceExpenses, getCustomCategories, saveCustomCategories, sessionOnly } from '../src/db';
 import type { Expense } from '../src/domain';
 
 const expense: Expense = {
@@ -24,5 +24,17 @@ describe('modo temporal explícito', () => {
     await replaceExpenses([expense]);
     await expect(replaceExpenses([{ ...expense, amount: 0 }])).rejects.toThrow();
     expect(await getExpenses()).toEqual([expense]);
+  });
+  it('conserva categorías sin IndexedDB y restaura gastos y categorías juntos', async () => {
+    enableSessionStorage();
+    await saveCustomCategories(['custom:Mascotas']);
+    const categories = await getCustomCategories();
+    categories.push('custom:Viajes');
+    expect(await getCustomCategories()).toEqual(['custom:Mascotas']);
+    await expect(replaceExpenses([], ['custom:'])).rejects.toThrow();
+    expect(await getCustomCategories()).toEqual(['custom:Mascotas']);
+    await replaceExpenses([{ ...expense, category: 'custom:Educación' }], ['custom:Educación']);
+    expect((await getExpenses())[0].category).toBe('custom:Educación');
+    expect(await getCustomCategories()).toEqual(['custom:Educación']);
   });
 });

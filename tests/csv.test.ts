@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { exportCsv, importCsv } from '../src/csv';
-import { filterExpenses, type Expense } from '../src/domain';
+import { createCustomCategory, filterExpenses, type Expense } from '../src/domain';
 
 const expense: Expense = {
   id: 'csv', date: '2026-11-10', merchant: 'Café "Sol", Centro', amount: 12005,
@@ -18,6 +18,23 @@ describe('exportación CSV local', () => {
     expect(csv).not.toContain('createdAt');
   });
   describe('importación CSV', () => {
+    it('recupera categorías personales y neutraliza sus fórmulas', () => {
+      const category = createCustomCategory('=Mascotas <&">');
+      const csv = exportCsv([{ ...expense, category }]);
+      expect(csv).toContain(`"'=Mascotas <&"">"`);
+      expect(importCsv(csv)[0].category).toBe(category);
+    });
+    it('reutiliza categorías personales conocidas sin distinguir acentos ni mayúsculas', () => {
+      const category = createCustomCategory('Educación');
+      const csv = exportCsv([{ ...expense, category: 'custom:educacion' }]);
+      expect(importCsv(csv, [category])[0].category).toBe(category);
+      expect(importCsv(exportCsv([
+        { ...expense, category }, { ...expense, category: 'custom:EDUCACION' },
+      ])).map(item => item.category)).toEqual([category, category]);
+    });
+    it.each(['', 'x'.repeat(41), 'Una\ncategoría'])('rechaza nombres de categoría inválidos del CSV: %s', name => {
+      expect(() => importCsv(exportCsv([{ ...expense, category: `custom:${name}` }]))).toThrow('No se importó');
+    });
     it('recupera un CSV exportado con acentos, comillas, comas y saltos de línea, sin fotos', () => {
       const [imported] = importCsv(exportCsv([expense]));
       expect(imported).toMatchObject({

@@ -2,17 +2,55 @@ export const categories = [
   'gasolina', 'super', 'restaurantes', 'transporte', 'servicios',
   'salud', 'compras', 'entretenimiento', 'otros',
 ] as const;
-export type Category = typeof categories[number];
-export const labels: Record<Category, string> = {
+type BuiltinCategory = typeof categories[number];
+export type CustomCategory = `custom:${string}`;
+export type Category = BuiltinCategory | CustomCategory;
+export const labels: Record<BuiltinCategory, string> = {
   gasolina: 'Gasolina', super: 'Súper', restaurantes: 'Restaurantes',
   transporte: 'Transporte', servicios: 'Servicios', salud: 'Salud',
   compras: 'Compras', entretenimiento: 'Entretenimiento', otros: 'Otros',
 };
-export const colors: Record<Category, string> = {
+export const colors: Record<BuiltinCategory, string> = {
   gasolina: '#d48730', super: '#35775a', restaurantes: '#bd5d48',
   transporte: '#5084a1', servicios: '#8b73ab', salud: '#388e86',
   compras: '#b4678b', entretenimiento: '#8a8b33', otros: '#737d83',
 };
+export function createCustomCategory(name: string): CustomCategory {
+  const trimmed = name.trim();
+  if (!trimmed || trimmed.length > 40 || /[\u0000-\u001f\u007f]/.test(trimmed)) {
+    throw new Error('Escribe una categoría de 1 a 40 caracteres, sin saltos de línea.');
+  }
+  if (categories.some(category => normalize(labels[category]) === normalize(trimmed))) {
+    throw new Error('Ya existe una categoría con ese nombre.');
+  }
+  return `custom:${trimmed}`;
+}
+export function isCategory(value: string): value is Category {
+  if ((categories as readonly string[]).includes(value)) return true;
+  if (!value.startsWith('custom:')) return false;
+  try { return createCustomCategory(value.slice(7)) === value; }
+  catch { return false; }
+}
+export function categoryLabel(category: Category): string {
+  return category.startsWith('custom:') ? category.slice(7) : labels[category as BuiltinCategory];
+}
+export function categoryColor(category: Category): string {
+  if (!category.startsWith('custom:')) return colors[category as BuiltinCategory];
+  const hash = [...category].reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 0);
+  return Object.values(colors)[hash % categories.length];
+}
+export function validateCustomCategories(values: unknown): asserts values is CustomCategory[] {
+  if (!Array.isArray(values)) throw new Error('Las categorías no son válidas.');
+  const names = new Set<string>();
+  for (const value of values) {
+    if (typeof value !== 'string' || !value.startsWith('custom:') || !isCategory(value)) {
+      throw new Error('Selecciona una categoría válida.');
+    }
+    const name = normalize(categoryLabel(value));
+    if (names.has(name)) throw new Error('Ya existe una categoría con ese nombre.');
+    names.add(name);
+  }
+}
 export interface Expense {
   id: string;
   date: string;
@@ -89,7 +127,8 @@ export function dailyTotals(expenses: Expense[], start: string, end: string) {
   return days;
 }
 export function categoryTotals(expenses: Expense[]) {
-  return categories.map(category => ({
+  const available = [...categories, ...new Set(expenses.map(expense => expense.category))];
+  return [...new Set(available)].map(category => ({
     category, amount: expenses.filter(e => e.category === category).reduce((sum, e) => sum + e.amount, 0),
   })).filter(item => item.amount > 0).sort((a, b) => b.amount - a.amount);
 }
@@ -97,6 +136,6 @@ export function validateExpense(expense: Expense): void {
   if (!validDate(expense.date)) throw new Error('Selecciona una fecha válida.');
   if (!expense.merchant.trim()) throw new Error('Escribe el nombre del comercio.');
   if (!Number.isSafeInteger(expense.amount) || expense.amount <= 0) throw new Error('Escribe un importe válido mayor que cero.');
-  if (!categories.includes(expense.category)) throw new Error('Selecciona una categoría válida.');
+  if (!isCategory(expense.category)) throw new Error('Selecciona una categoría válida.');
   if (expense.currency !== 'MXN') throw new Error('Esta versión utiliza pesos mexicanos.');
 }

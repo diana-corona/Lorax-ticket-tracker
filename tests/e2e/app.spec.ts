@@ -1,6 +1,119 @@
 import { expect, test } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 
+test('las tarjetas y encabezados vacíos abren Agrega un gasto con teclado y ratón', async ({ page }) => {
+  await page.goto('./');
+  for (const screen of ['Resumen', 'Gastos']) {
+    for (const target of [screen === 'Resumen' ? 'Últimos movimientos' : 'Historial de gastos', '0 gastos: agrega un gasto', 'No hay gastos en esta selección']) {
+      await page.getByRole('button', { name: screen, exact: true }).click();
+      const button = page.getByRole('button', { name: target, exact: target !== 'No hay gastos en esta selección' });
+      await button.focus();
+      await page.keyboard.press('Enter');
+      await expect(page.getByRole('heading', { name: 'Agrega un gasto', exact: true })).toBeFocused();
+      await expect(page.getByText('UN TICKET, UN GASTO', { exact: true })).toBeVisible();
+    }
+  }
+  await page.getByRole('button', { name: 'Resumen', exact: true }).click();
+  await page.getByText('Agrega tu primer ticket o cambia los filtros.', { exact: true }).click();
+  await expect(page.getByRole('heading', { name: 'Agrega un gasto', exact: true })).toBeVisible();
+});
+
+test('categorías personales: captura, persistencia, gráficas, respaldo y CSV', async ({ page }) => {
+  const name = 'Educación <&">';
+  const category = `custom:${name}`;
+  await page.goto('./');
+  await page.getByRole('button', { name: 'No hay gastos en esta selección' }).click();
+  await page.getByLabel('Comercio', { exact: true }).fill('Escuela de prueba');
+  await page.getByLabel('Importe (MXN)').fill('250.50');
+  await page.getByText('Agregar categoría', { exact: true }).click();
+  await page.getByLabel('Nombre de la categoría').fill(name);
+  await page.getByRole('button', { name: 'Guardar categoría', exact: true }).click();
+  await expect(page.getByLabel('Comercio', { exact: true })).toHaveValue('Escuela de prueba');
+  await expect(page.getByLabel('Importe (MXN)')).toHaveValue('250.50');
+  await expect(page.getByRole('combobox', { name: 'Categoría', exact: true })).toHaveValue(category);
+  await page.getByText('Agregar categoría', { exact: true }).click();
+  await page.getByLabel('Nombre de la categoría').fill('EDUCACION <&">');
+  await page.getByRole('button', { name: 'Guardar categoría', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('Ya existe una categoría con ese nombre.');
+  await page.getByLabel('Nombre de la categoría').fill('Viajes');
+  await page.getByRole('button', { name: 'Guardar categoría', exact: true }).click();
+  await page.getByRole('combobox', { name: 'Categoría', exact: true }).selectOption(category);
+  await page.getByRole('button', { name: 'Guardar gasto', exact: true }).click();
+  await expect(page.getByText('Gasto guardado.', { exact: true })).toBeVisible();
+  await page.reload();
+  await page.getByRole('combobox', { name: 'Categoría', exact: true }).selectOption(category);
+  await expect(page.getByTestId('total')).toHaveText('$250.50');
+  await expect(page.locator('.legend').getByText(name, { exact: true })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const csvDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Exportar selección CSV', exact: true }).click();
+  const csv = await readFile((await (await csvDownload).path())!);
+  await page.getByRole('button', { name: 'Mis datos', exact: true }).click();
+  const backupDownload = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Descargar respaldo completo', exact: true }).click();
+  const backup = await readFile((await (await backupDownload).path())!);
+
+  const clearStorage = async () => {
+    await page.evaluate(() => new Promise<void>((resolve, reject) => {
+      const request = indexedDB.deleteDatabase('mis-tickets');
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    }));
+    await page.reload();
+    await page.getByRole('button', { name: 'Mis datos', exact: true }).click();
+  };
+  await clearStorage();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#import-backup').setInputFiles({ name: 'backup.json', mimeType: 'application/json', buffer: backup });
+  await expect(page.getByRole('alert')).toHaveText('Respaldo restaurado con sus fotos.');
+  await page.getByRole('button', { name: 'Resumen', exact: true }).click();
+  await expect(page.getByTestId('total')).toHaveText('$250.50');
+  await expect(page.locator('#category-filter option').filter({ hasText: 'Viajes' })).toHaveCount(1);
+  await page.getByRole('button', { name: 'Editar gasto de Escuela de prueba' }).click();
+  await expect(page.getByRole('combobox', { name: 'Categoría', exact: true })).toHaveValue(category);
+  await page.getByRole('button', { name: 'Mis datos', exact: true }).click();
+  await clearStorage();
+  page.once('dialog', dialog => dialog.accept());
+  await page.locator('#import-csv').setInputFiles({ name: 'expenses.csv', mimeType: 'text/csv', buffer: csv });
+  await expect(page.getByRole('alert')).toHaveText('1 gastos importados. Los gastos anteriores se conservaron.');
+  await page.getByRole('button', { name: 'Resumen', exact: true }).click();
+  await expect(page.locator('.legend').getByText(name, { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Editar gasto de Escuela de prueba' }).click();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Eliminar este gasto', exact: true }).click();
+  await page.reload();
+  await expect(page.locator('#category-filter option').filter({ hasText: name })).toHaveCount(1);
+});
+
+test('actualizar el almacenamiento anterior conserva los gastos existentes', async ({ page }) => {
+  await page.goto('icon.svg');
+  await page.evaluate(() => new Promise<void>((resolve, reject) => {
+    const request = indexedDB.open('mis-tickets', 1);
+    request.onupgradeneeded = () => request.result.createObjectStore('expenses', { keyPath: 'id' });
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('expenses', 'readwrite');
+      const today = new Date();
+      tx.objectStore('expenses').put({
+        id: 'legacy', merchant: 'Gasto anterior', date: `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`,
+        amount: 12500, currency: 'MXN', category: 'otros', notes: '', createdAt: today.toISOString(),
+      });
+      tx.oncomplete = () => { db.close(); resolve(); };
+      tx.onerror = () => reject(tx.error);
+    };
+  }));
+  await page.goto('./');
+  await expect(page.getByTestId('total')).toHaveText('$125.00');
+  await page.getByRole('button', { name: 'Editar gasto de Gasto anterior' }).click();
+  await page.getByText('Agregar categoría', { exact: true }).click();
+  await page.getByLabel('Nombre de la categoría').fill('Mascotas');
+  await page.getByRole('button', { name: 'Guardar categoría', exact: true }).click();
+  await expect(page.getByRole('alert')).toHaveText('Categoría guardada.');
+  await expect(page.getByLabel('Comercio', { exact: true })).toHaveValue('Gasto anterior');
+});
+
 test('captura manual, persistencia, filtros, edición, CSV y eliminación', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
@@ -41,6 +154,10 @@ test('captura manual, persistencia, filtros, edición, CSV y eliminación', asyn
   }
   await page.getByRole('combobox', { name: 'Categoría', exact: true }).selectOption('gasolina');
   await expect(page.getByTestId('total')).toHaveText('$0.00');
+  await page.getByRole('button', { name: 'No hay gastos en esta selección' }).click();
+  await expect(page.getByRole('heading', { name: 'Agrega un gasto', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Cancelar', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Categoría', exact: true })).toHaveValue('gasolina');
   await page.getByRole('combobox', { name: 'Categoría', exact: true }).selectOption('super');
   await page.getByRole('button', { name: 'Editar gasto de Súper de prueba' }).click();
   await page.getByLabel('Importe (MXN)').fill('200.10');

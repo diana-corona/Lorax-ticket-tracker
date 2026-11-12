@@ -98,6 +98,16 @@ td:last-child, th:last-child { text-align: right; }
 .empty h3 { color: #435b4c; margin-bottom: 6px; }
 .empty p { font-size: .85rem; margin-bottom: 0; }
 .empty.small { min-height: 215px; display: grid; place-items: center; }
+.empty-action { display: block; width: 100%; background: transparent; border-radius: 12px; }
+.empty-action:hover { background: #f5f7f1; }
+.empty-title { display: block; color: #435b4c; font-weight: 700; margin-bottom: 6px; }
+.empty-description { display: block; font-size: .85rem; line-height: 1.6; }
+.empty-action > .text-button { display: block; margin-top: 12px; }
+.empty-heading { font: inherit; }
+.custom-category summary { color: #315f4c; font-size: .85rem; }
+.custom-category label, .custom-category button { margin-top: 14px; }
+.custom-category p { margin: 12px 0 0; }
+.legend li > span:not(.dot), .expense-info > span { overflow-wrap: anywhere; }
 .form-layout { display: grid; grid-template-columns: .9fr 1.1fr; gap: 24px; }
 .muted { color: var(--muted); font-size: .8rem; font-weight: 400; }
 .photo-placeholder { text-align: center; background: #f5f7f1; border: 1px dashed #c4cfbd; border-radius: 12px; padding: 30px 16px; margin-bottom: 18px; }
