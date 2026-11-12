@@ -4,7 +4,28 @@ import { readFile } from 'node:fs/promises';
 test('captura manual, persistencia, filtros, edición, CSV y eliminación', async ({ page }) => {
   const errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.goto('/');
+  await page.goto('./');
+  const homeScreen = await page.evaluate(async () => {
+    const manifestUrl = (document.querySelector('link[rel="manifest"]') as HTMLLinkElement).href;
+    const manifest = await (await fetch(manifestUrl)).json();
+    const icons = await Promise.all(manifest.icons.filter((icon: { type: string }) => icon.type === 'image/png')
+      .map(async (icon: { src: string }) => {
+        const image = new Image();
+        image.src = new URL(icon.src, manifestUrl).href;
+        await image.decode();
+        return { width: image.naturalWidth, height: image.naturalHeight };
+      }));
+    return {
+      start: new URL(manifest.start_url, manifestUrl).href,
+      scope: new URL(manifest.scope, manifestUrl).href,
+      display: manifest.display,
+      icons,
+    };
+  });
+  expect(homeScreen.start).toBe(page.url());
+  expect(homeScreen.scope).toBe(page.url());
+  expect(homeScreen.display).toBe('standalone');
+  expect(homeScreen.icons).toEqual([{ width: 192, height: 192 }, { width: 512, height: 512 }]);
   await page.getByRole('button', { name: '+ Nuevo gasto', exact: true }).first().click();
   await page.getByLabel('Comercio', { exact: true }).fill('Súper de prueba');
   await page.getByLabel('Importe (MXN)').fill('123.45');
@@ -41,7 +62,7 @@ test('captura manual, persistencia, filtros, edición, CSV y eliminación', asyn
 test('OCR real sin internet, foto persistente y cero peticiones a terceros', async ({ page, context }) => {
   const requests: string[] = [];
   page.on('request', request => requests.push(request.url()));
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.locator('#offline-status')).toContainText('Lorax ticket tracker está listo', { timeout: 60_000 });
   await page.evaluate(async () => {
     if (!navigator.serviceWorker.controller) {

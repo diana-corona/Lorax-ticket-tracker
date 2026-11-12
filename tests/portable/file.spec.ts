@@ -3,7 +3,7 @@ import { pathToFileURL } from 'node:url';
 import { resolve } from 'node:path';
 import { readFile } from 'node:fs/promises';
 
-const appUrl = pathToFileURL(resolve('lorax.html')).href;
+const appUrl = pathToFileURL(resolve('lorax-ticket-tracker.html')).href;
 async function backup(page: Page) {
   await page.getByRole('button', { name: 'Mis datos', exact: true }).first().click();
   await expect(page.locator('.privacy-note')).toContainText('Descarga un respaldo antes de cerrar Lorax ticket tracker,');

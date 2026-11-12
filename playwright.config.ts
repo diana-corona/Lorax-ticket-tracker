@@ -6,7 +6,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   fullyParallel: false,
   use: {
-    baseURL: 'http://localhost:4174',
+    baseURL: 'http://localhost:4174/Lorax-ticket-tracker/',
     trace: 'retain-on-failure',
     screenshot: 'only-on-failure',
   },
@@ -16,7 +16,7 @@ export default defineConfig({
   ],
   webServer: {
     command: 'npm run preview -- --port 4174 --strictPort',
-    url: 'http://localhost:4174',
+    url: 'http://localhost:4174/Lorax-ticket-tracker/',
     reuseExistingServer: false,
   },
 });

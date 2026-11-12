@@ -17,7 +17,7 @@ export async function registerOffline(status: (message: string) => void, update:
   });
   try {
     status('Preparando Lorax ticket tracker…');
-    const registration = await navigator.serviceWorker.register('/sw.js');
+    const registration = await navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`);
     const reportUpdate = () => update(() => {
       reloading = true;
       registration.waiting?.postMessage('SKIP_WAITING');

@@ -53,7 +53,7 @@ const html = `<!doctype html>
 <div id="app"></div>
 <script id="portable-ocr" type="application/json">${resources}</script>
 <script>${javascript}</script></body></html>`;
-const destination = new URL('lorax.html', root);
+const destination = new URL('lorax-ticket-tracker.html', root);
 await writeFile(destination, html);
 await rm(output, { recursive: true, force: true });
 console.log(`Archivo autónomo: ${fileURLToPath(destination)} (${(Buffer.byteLength(html) / 1024 / 1024).toFixed(1)} MB).`);

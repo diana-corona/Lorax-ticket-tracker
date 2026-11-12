@@ -14,7 +14,7 @@ requisito para usar el archivo local.
 
 ## Requisitos acordados
 
-- Abrir el archivo `lorax.html` en Chrome de Android, sin ZIP,
+- Abrir el archivo `lorax-ticket-tracker.html` en Chrome de Android, sin ZIP,
   instalacion, sitio web ni servidor.
 - Datos independientes por telefono, navegador y origen de la app.
 - Sin cuentas, sincronizacion, base de datos remota ni APIs de procesamiento.
@@ -212,7 +212,7 @@ npm ci
 npm run build:portable
 ```
 
-Resultado: `lorax.html`, aproximadamente 6.6 MB, con OCR en
+Resultado: `lorax-ticket-tracker.html`, aproximadamente 6.6 MB, con OCR en
 espanol incluido. Transferir ese unico archivo a Descargas del telefono y
 seleccionar abrir con Chrome; no enviar el ZIP web anterior ni instalar nada.
 Si Android solo ofrece un visor o bloquea su ejecucion, registrar esa limitacion:

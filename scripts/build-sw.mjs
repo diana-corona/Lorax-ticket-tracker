@@ -7,7 +7,7 @@ const root = new URL('../dist/', import.meta.url);
 const paths = (await readdir(root, { recursive: true, withFileTypes: true }))
   .filter(entry => entry.isFile() && entry.name !== 'sw.js')
   .map(entry => join(entry.parentPath, entry.name));
-const assetPath = path => '/' + relative(fileURLToPath(root), path).split(sep).join('/');
+const assetPath = path => './' + relative(fileURLToPath(root), path).split(sep).join('/');
 const hash = createHash('sha256');
 for (const path of paths.sort()) {
   hash.update(assetPath(path));

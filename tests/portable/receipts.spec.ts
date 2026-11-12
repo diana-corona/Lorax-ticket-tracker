@@ -29,7 +29,7 @@ for (const file of samples.filter(name => expected[name])) {
       if (/^https?:/.test(request.url())) requests.push(request.url());
     });
     await context.setOffline(true);
-    await page.goto(pathToFileURL(resolve('lorax.html')).href);
+    await page.goto(pathToFileURL(resolve('lorax-ticket-tracker.html')).href);
     await page.getByRole('button', { name: '+ Nuevo gasto', exact: true }).first().click();
     await page.locator('#gallery').setInputFiles(resolve('tickets-test', file));
     await page.getByRole('button', { name: 'Leer ticket', exact: true }).click();

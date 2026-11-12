@@ -8,6 +8,7 @@ test-results/
 .portable-build/
 mis-tickets-android.html
 lorax.html
+lorax-ticket-tracker.html
 tickets-test/
 .env
 .env.*

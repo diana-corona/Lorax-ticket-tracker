@@ -53,7 +53,7 @@ function render() {
   if (photoUrl) URL.revokeObjectURL(photoUrl);
   photoUrl = undefined;
   root.innerHTML = `
-    <header class="topbar"><a class="brand" href="#" aria-label="Lorax ticket tracker, inicio"><img src="/icon.svg" width="38" height="38" alt="" /><span>Lorax ticket tracker</span></a><span class="brand-caption">Gastos bajo control.</span></header>
+    <header class="topbar"><a class="brand" href="#" aria-label="Lorax ticket tracker, inicio"><img src="${__PORTABLE__ ? '/icon.svg' : `${import.meta.env.BASE_URL}icon.svg`}" width="38" height="38" alt="" /><span>Lorax ticket tracker</span></a><span class="brand-caption">Gastos bajo control.</span></header>
     <div class="workspace">
       <nav class="tabs" aria-label="Navegación principal">
         ${([['home', 'Resumen'], ['history', 'Gastos'], ['form', '+ Nuevo gasto'], ['data', 'Mis datos']] as const).map(([id, title]) =>

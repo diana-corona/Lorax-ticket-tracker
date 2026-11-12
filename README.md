@@ -18,7 +18,7 @@ npm ci
 npm run build:portable
 ```
 
-This generates **`lorax.html`** with the interface, OCR engine, and Spanish
+This generates **`lorax-ticket-tracker.html`** with the interface, OCR engine, and Spanish
 language model included. Send that single file to an Android phone and open it
 in Chrome. No server, publishing, or installation is required to run this
 version. Chrome may not offer an install or home-screen shortcut for local files.
@@ -48,6 +48,23 @@ npm run dev
 The optional hosted-web build is available with `npm run build` and
 `npm run preview`. `index.html` is a required build source, not a second Android
 deliverable. Generated HTML, build directories, and dependencies are not tracked.
+
+## GitHub Pages
+
+The hosted app is configured for
+**https://diana-corona.github.io/Lorax-ticket-tracker/**.
+In the repository's **Settings → Pages**, choose **GitHub Actions** as the
+deployment source. Pushing to `main` builds and publishes the app through
+`.github/workflows/pages.yml`; the workflow can also be run manually.
+
+On Android, open that URL in Chrome, then choose **Add to Home screen** or
+**Install app** from the menu. Wait for the app's ready message before using it
+offline. The first visit downloads the OCR resources.
+
+Receipts and expenses remain on the device; GitHub Pages serves only the app.
+The hosted app cannot automatically read expenses from the downloaded HTML.
+Export a full backup there, then restore it in the hosted app to migrate.
+Keep regular backups: clearing browser/site data can erase saved expenses.
 
 ## Tests
 

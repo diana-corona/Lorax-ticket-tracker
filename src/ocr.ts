@@ -8,10 +8,11 @@ export async function readReceipt(photo: Blob, progress: (value: string) => void
   try {
     progress('Preparando lectura…');
     if (__PORTABLE__) localWorker = embeddedWorkerUrl();
+    const ocrRoot = new URL(`${import.meta.env.BASE_URL}ocr/`, location.href).href;
     worker = await createWorker('spa', OEM.LSTM_ONLY, {
-      workerPath: localWorker ?? '/ocr/worker.min.js',
-      corePath: '/ocr/core',
-      langPath: __PORTABLE__ ? 'file:///mis-tickets-embedded' : '/ocr',
+      workerPath: localWorker ?? `${ocrRoot}worker.min.js`,
+      corePath: `${ocrRoot}core`,
+      langPath: __PORTABLE__ ? 'file:///mis-tickets-embedded' : ocrRoot,
       cacheMethod: __PORTABLE__ ? 'none' : 'write',
       workerBlobURL: false,
       gzip: true,
